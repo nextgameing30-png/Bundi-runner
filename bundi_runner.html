@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Bundi Runner</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#87c9e8;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+canvas{display:block;width:100vw;height:100vh;touch-action:none}
+#ui{position:fixed;inset:0;pointer-events:none;color:#fff;text-shadow:0 2px 3px #333}
+#score{position:absolute;top:18px;left:18px;font-size:22px;font-weight:800}
+#best{position:absolute;top:48px;left:18px;font-size:14px}
+#title{position:absolute;top:15px;left:50%;transform:translateX(-50%);font-size:25px;font-weight:900;letter-spacing:1px}
+#help{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);font-size:13px;background:#0007;padding:7px 12px;border-radius:20px}
+#gameover{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;background:#0006;pointer-events:auto}
+.card{background:#fff;color:#252525;text-shadow:none;border-radius:22px;padding:25px 30px;min-width:260px;box-shadow:0 12px 40px #0005}
+.card h1{margin:0 0 8px;font-size:34px}.card p{margin:7px 0 18px}
+button{border:0;border-radius:13px;background:#d98a35;color:#fff;padding:12px 25px;font-size:17px;font-weight:800;cursor:pointer}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui">
+  <div id="title">BUNDI RUNNER</div>
+  <div id="score">Score: 0</div>
+  <div id="best">Best: 0</div>
+  <div id="help">SPACE / TAP = JUMP</div>
+  <div id="gameover">
+    <div class="card">
+      <h1>Game Over</h1>
+      <p id="final"></p>
+      <button id="restart">Run Again</button>
+    </div>
+  </div>
+</div>
+<script>
+const c=document.getElementById('game'),x=c.getContext('2d');
+let W,H,dpr,ground,player,obs,coins,score,best=+localStorage.bundiBest||0,gameOver,last=0,spawn=0,coinSpawn=0,speed=6;
+const scoreEl=document.getElementById('score'),bestEl=document.getElementById('best');
+bestEl.textContent='Best: '+best;
+
+function resize(){dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;c.width=W*dpr;c.height=H*dpr;c.style.width=W+'px';c.style.height=H+'px';x.setTransform(dpr,0,0,dpr,0,0);ground=H*.78}
+addEventListener('resize',resize);resize();
+
+function reset(){
+ player={x:W*.16,y:ground-62,w:38,h:62,vy:0,onGround:true};
+ obs=[];coins=[];score=0;speed=6;spawn=70;coinSpawn=35;gameOver=false;
+ document.getElementById('gameover').style.display='none';
+}
+function jump(){if(gameOver){reset();return} if(player.onGround){player.vy=-15;player.onGround=false}}
+addEventListener('keydown',e=>{if(e.code==='Space'||e.code==='ArrowUp'){e.preventDefault();jump()}});
+c.addEventListener('pointerdown',jump);
+document.getElementById('restart').onclick=reset;
+
+function rect(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y}
+function drawSky(){
+ let g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,'#78c7e8');g.addColorStop(1,'#f4d39b');x.fillStyle=g;x.fillRect(0,0,W,H);
+ // sun
+ x.fillStyle='#ffe49a';x.beginPath();x.arc(W*.82,H*.17,45,0,7);x.fill();
+ // Aravalli hills
+ x.fillStyle='#6e8c61';x.beginPath();x.moveTo(0,ground);x.lineTo(0,ground-120);x.quadraticCurveTo(W*.16,ground-190,W*.34,ground-105);x.quadraticCurveTo(W*.55,ground-200,W*.72,ground-100);x.quadraticCurveTo(W*.88,ground-160,W,ground-80);x.lineTo(W,ground);x.fill();
+ // distant fort
+ let fx=W*.55,fy=ground-135;
+ x.fillStyle='#b96f3b';x.fillRect(fx,fy,185,85);
+ x.fillRect(fx-15,fy+18,215,67);
+ x.fillStyle='#8f542f';x.fillRect(fx+20,fy+30,30,55);x.fillRect(fx+90,fy+18,34,67);x.fillRect(fx+155,fy+38,25,47);
+ x.fillStyle='#d18b4e';x.fillRect(fx+5,fy-18,38,30);x.fillRect(fx+55,fy-30,55,42);x.fillRect(fx+125,fy-20,45,32);
+ // palace windows
+ x.fillStyle='#4d3528';for(let i=0;i<6;i++){x.fillRect(fx+12+i*29,fy+48,12,18)}
+ // city silhouettes
+ x.fillStyle='#9b5d3b';for(let i=0;i<W;i+=65){let h=25+((i*7)%45);x.fillRect(i,ground-45-h,55,h+45)}
+}
+function drawGround(){
+ x.fillStyle='#c9874b';x.fillRect(0,ground,W,H-ground);
+ x.fillStyle='#7b4c34';x.fillRect(0,ground,W,7);
+ // road stones
+ x.strokeStyle='#a86743';x.lineWidth=2;
+ for(let i=0;i<W+80;i+=70){x.beginPath();x.moveTo(i,ground+28);x.lineTo(i+40,ground+28);x.stroke();x.beginPath();x.moveTo(i+20,ground+58);x.lineTo(i+70,ground+58);x.stroke()}
+}
+function drawPlayer(){
+ x.save();x.translate(player.x,player.y);
+ // shadow
+ x.restore(); x.fillStyle='#0003';x.beginPath();x.ellipse(player.x+19,ground+3,25,6,0,0,7);x.fill();
+ x.save();x.translate(player.x,player.y);
+ // legs
+ x.strokeStyle='#283447';x.lineWidth=7;x.lineCap='round';
+ x.beginPath();x.moveTo(15,47);x.lineTo(10,61);x.moveTo(28,47);x.lineTo(34,61);x.stroke();
+ // body
+ x.fillStyle='#e9f0f2';x.fillRect(9,23,25,27);
+ // scarf
+ x.fillStyle='#d88732';x.fillRect(5,25,33,7);
+ // head
+ x.fillStyle='#b96f45';x.beginPath();x.arc(21,15,12,0,7);x.fill();
+ // hair
+ x.fillStyle='#2b201c';x.beginPath();x.arc(21,9,11,Math.PI,0);x.fill();
+ // arms
+ x.strokeStyle='#b96f45';x.lineWidth=6;x.beginPath();x.moveTo(10,29);x.lineTo(1,40);x.moveTo(34,29);x.lineTo(42,38);x.stroke();
+ x.restore();
+}
+function drawObstacle(o){
+ x.fillStyle='#71462e';x.fillRect(o.x,o.y,o.w,o.h);
+ x.fillStyle='#a96d3f';x.fillRect(o.x+4,o.y+4,o.w-8,7);
+ x.fillStyle='#5b3928';x.fillRect(o.x+8,o.y+18,7,7);x.fillRect(o.x+25,o.y+30,6,6);
+}
+function drawCoin(q){
+ x.fillStyle='#ffd34d';x.beginPath();x.arc(q.x,q.y,10,0,7);x.fill();x.strokeStyle='#b77a16';x.lineWidth=2;x.stroke();
+ x.fillStyle='#fff2a8';x.font='bold 13px sans-serif';x.textAlign='center';x.fillText('₹',q.x,q.y+5);
+}
+function loop(t){
+ let dt=Math.min((t-last)/16.67,2);last=t;
+ drawSky();drawGround();
+ if(!gameOver){
+   score+=0.09*dt*speed; speed=Math.min(11,6+score/700);
+   player.vy+=.75*dt;player.y+=player.vy*dt;
+   if(player.y+player.h>=ground){player.y=ground-player.h;player.vy=0;player.onGround=true}
+   spawn-=dt;coinSpawn-=dt;
+   if(spawn<=0){let h=30+Math.random()*30;obs.push({x:W+20,y:ground-h,w:25+Math.random()*18,h});spawn=70+Math.random()*80-speed*2}
+   if(coinSpawn<=0){coins.push({x:W+20,y:ground-75-Math.random()*100,w:20,h:20});coinSpawn=55+Math.random()*70}
+   for(let o of obs)o.x-=speed*dt;
+   for(let q of coins)q.x-=speed*dt;
+   obs=obs.filter(o=>o.x>-80);coins=coins.filter(q=>q.x>-50);
+   for(let o of obs)if(rect(player,o)){end()}
+   for(let i=coins.length-1;i>=0;i--)if(rect(player,coins[i])){score+=25;coins.splice(i,1)}
+ }
+ obs.forEach(drawObstacle);coins.forEach(drawCoin);drawPlayer();
+ scoreEl.textContent='Score: '+Math.floor(score);bestEl.textContent='Best: '+best;
+ requestAnimationFrame(loop);
+}
+function end(){gameOver=true;let s=Math.floor(score);if(s>best){best=s;localStorage.bundiBest=best}document.getElementById('final').textContent='Score: '+s+'  •  Best: '+best;document.getElementById('gameover').style.display='flex'}
+reset();requestAnimationFrame(loop);
+</script>
+</body>
+</html>
